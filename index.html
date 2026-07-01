@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Froggy Math - Petualangan Matematika</title>
+    <style>
+        :root { --water: #2980b9; --grass: #27ae60; --leaf: #2ecc71; --sky: #87ceeb; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: 'Comic Sans MS', cursive; background: var(--sky); overflow: hidden; touch-action: manipulation; }
+        
+        .rain { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 1; opacity: 0.3; }
+        
+        #game-container { display: grid; width: 100vw; height: 100vh; gap: 2px; padding: 2px; box-sizing: border-box; z-index: 2; position: relative; }
+        .player-area { background: linear-gradient(to bottom, var(--sky), #dff9fb); border: 2px solid white; display: flex; flex-direction: column; align-items: center; justify-content: space-between; position: relative; padding: 5px; overflow: hidden; }
+        
+        .platform { width: 120px; height: 40px; background: var(--leaf); border-radius: 50%; animation: sway 3s infinite ease-in-out; margin-top: -30px; z-index: 2; }
+        @keyframes sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+
+        .frog-container { height: 120px; display: flex; align-items: flex-end; justify-content: center; position: relative; z-index: 3; transition: all 0.5s ease; }
+        .frog-sprite { font-size: 60px; }
+        
+        .question-box { background: white; padding: 10px; border-radius: 15px; font-size: 1.2rem; font-weight: bold; border: 3px solid var(--water); z-index: 5; text-align: center; }
+        .options { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; width: 100%; z-index: 10; }
+        .btn { padding: 10px; border: none; border-radius: 8px; background: var(--grass); color: white; font-size: 14px; font-weight: bold; cursor: pointer; box-shadow: 0 3px #1e8449; }
+        .btn-small { padding: 5px; font-size: 12px; background: #e67e22; }
+        
+        #feedback { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3rem; font-weight: bold; z-index: 5000; display: none; text-shadow: 2px 2px white; }
+        .water-layer { position: absolute; bottom: 0; width: 100%; height: 20%; background: var(--water); z-index: 1; }
+        
+        .ripple { animation: ripple-effect 1.5s linear; border: 3px solid white; border-radius: 50%; position: absolute; width: 60px; height: 60px; z-index: 2; }
+        @keyframes ripple-effect { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(4); opacity: 0; } }
+        
+        .pause-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:100; display:none; align-items:center; justify-content:center; flex-direction:column; color:white; font-size: 2rem; }
+        
+        /* Gaya Menu Materi */
+        .materi-card { background: white; color: #333; padding: 20px; border-radius: 20px; max-width: 90%; max-height: 80vh; overflow-y: auto; text-align: center; border: 5px solid var(--water); }
+        .anim-box { display: flex; justify-content: center; gap: 10px; font-size: 2rem; margin: 10px 0; }
+        .hop { animation: hop 1s infinite; }
+        @keyframes hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+    </style>
+</head>
+<body>
+
+    <div class="rain" id="rain"></div>
+    <div id="menu" style="position:fixed; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;">
+        <h1>Froggy Math 🐸</h1>
+        <button class="btn" style="width:200px" onclick="showMateri()">Belajar Matematika</button>
+        <div style="margin-top:20px;">
+            <button class="btn" onclick="initGame(1)">Solo</button>
+            <button class="btn" onclick="initGame(2)">Duel</button>
+            <button class="btn" onclick="initGame(4)">Squad</button>
+        </div>
+    </div>
+
+    <div id="materi" style="position:fixed; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:9999; display:none; align-items:center; justify-content:center; color:white;">
+        <div class="materi-card">
+            <h2>Petualangan Belajar!</h2>
+            <div style="text-align: left; font-size: 1.1rem;">
+                <p>🐸 <b>Penjumlahan (Tambah):</b></p>
+                <div class="anim-box"><span>🐸🐸</span> + <span>🐸🐸🐸</span> = <span>🐸🐸🐸🐸🐸</span></div>
+                <p>Artinya: 2 + 3 = 5. Bayangkan katak melompat datang ke daunmu!</p>
+                
+                <hr>
+                
+                <p>💦 <b>Pengurangan (Kurang):</b></p>
+                <div class="anim-box"><span>🐸🐸🐸🐸🐸</span> - <span>🐸🐸</span> = <span>🐸🐸🐸</span></div>
+                <p>Artinya: 5 - 2 = 3. Bayangkan katak melompat pergi ke air!</p>
+            </div>
+            <button class="btn" style="margin-top:20px;" onclick="document.getElementById('materi').style.display='none'">Kembali ke Menu</button>
+        </div>
+    </div>
+
+    <div id="game-container"></div>
+    <div id="feedback"></div>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let scores = [];
+        let isPaused = false;
+
+        function showMateri() { document.getElementById('materi').style.display = 'flex'; }
+
+        function playSound(freq) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        function initGame(num) {
+            document.getElementById('menu').style.display = 'none';
+            const container = document.getElementById('game-container');
+            container.style.gridTemplateColumns = num === 1 ? '1fr' : (num === 2 ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)');
+            container.innerHTML = '';
+            for(let i=0; i<num; i++) {
+                const area = document.createElement('div');
+                area.className = 'player-area';
+                area.innerHTML = `
+                    <div style="display:flex; gap:5px;">
+                        <button class="btn btn-small" onclick="togglePause()">Pause</button>
+                        <button class="btn btn-small" onclick="location.reload()">Menu</button>
+                    </div>
+                    <div class="score">Skor: <span id="s${i}">0</span></div>
+                    <div class="frog-container" id="fCont${i}"><div class="frog-sprite">🐸</div></div>
+                    <div class="platform"></div>
+                    <div class="question-box" id="q${i}">...</div>
+                    <div class="options" id="o${i}"></div>
+                    <div class="water-layer" id="water${i}"></div>
+                    <div class="pause-overlay" id="pause${i}">PAUSED<br><button class="btn" onclick="togglePause()">Lanjut</button></div>`;
+                container.appendChild(area);
+                nextQ(i);
+            }
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            document.querySelectorAll('.pause-overlay').forEach(el => el.style.display = isPaused ? 'flex' : 'none');
+        }
+
+        function nextQ(i) {
+            if(isPaused) return;
+            const a = Math.floor(Math.random()*10)+1, b = Math.floor(Math.random()*10)+1;
+            const isAdd = Math.random() > 0.5;
+            const res = isAdd ? a + b : (a >= b ? a - b : b - a);
+            document.getElementById('q'+i).innerText = (isAdd ? `${a}+${b}` : (a >= b ? `${a}-${b}` : `${b}-${a}`)) + '=?';
+            const opts = document.getElementById('o'+i);
+            opts.innerHTML = '';
+            [res, res+2, res-1, res+3].sort(()=>Math.random()-0.5).forEach(v => {
+                const b = document.createElement('button');
+                b.className = 'btn'; b.innerText = v;
+                b.onclick = () => !isPaused && answer(i, v === res);
+                opts.appendChild(b);
+            });
+        }
+
+        function answer(i, isCorrect) {
+            if(isPaused) return;
+            const fCont = document.getElementById('fCont'+i);
+            const water = document.getElementById('water'+i);
+            const feedback = document.getElementById('feedback');
+
+            if(isCorrect) {
+                scores[i] = (scores[i] || 0) + 10;
+                document.getElementById('s'+i).innerText = scores[i];
+                playSound(600);
+                feedback.innerText = "BENAR! 🎉"; feedback.style.color = "green";
+                feedback.style.display = 'block';
+                setTimeout(() => { feedback.style.display = 'none'; nextQ(i); }, 800);
+            } else {
+                playSound(200);
+                feedback.innerText = "SALAH! 💦"; feedback.style.color = "red";
+                feedback.style.display = 'block';
+                fCont.style.transform = 'translateY(250px)';
+                const ripple = document.createElement('div');
+                ripple.className = 'ripple';
+                water.appendChild(ripple);
+                setTimeout(() => { 
+                    fCont.style.transform = 'translateY(0)'; 
+                    feedback.style.display = 'none';
+                    ripple.remove();
+                    nextQ(i);
+                }, 1500);
+            }
+        }
+    </script>
+</body>
+</html>
